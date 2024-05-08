@@ -10,13 +10,14 @@ using System;
 
 namespace AccountProvider.Functions
 {
-    public class SignIn(ILogger<SignIn> logger, SignInManager<UserAccount> signInManager)
+    public class SignIn(ILogger<SignIn> logger, SignInManager<UserAccount> signInManager, UserManager<UserAccount> userManager)
     {
         private readonly ILogger<SignIn> _logger = logger;
+        private readonly UserManager<UserAccount> _userManager = userManager;
         private readonly SignInManager<UserAccount> _signInManager = signInManager;
 
         [Function("SignIn")]
-        public async Task <IActionResult> Run([HttpTrigger(AuthorizationLevel.Function, "post")] HttpRequest req)
+        public async Task<IActionResult> Run([HttpTrigger(AuthorizationLevel.Function, "post")] HttpRequest req)
         {
             string body = null!;
 
@@ -47,19 +48,22 @@ namespace AccountProvider.Functions
                 {
                     try
                     {
-                        var result = await _signInManager.PasswordSignInAsync(ulr.Email, ulr.Password, ulr.IsPersistent, false);
+                        var userAccount = await _userManager.FindByEmailAsync(ulr.Email);
+                        var result = await _signInManager.CheckPasswordSignInAsync(userAccount!, ulr.Password, false);
                         if (result.Succeeded)
                         {
-                            // Get token from token provider
+                            // Get accestoken from token provider
                             return new OkObjectResult("accesstoken");
                         }
-                        return new UnauthorizedResult();
+
 
                     }
                     catch (Exception ex)
                     {
                         _logger.LogError($"_signInManager.PasswordSignInAsync :: {ex.Message}");
                     }
+
+                    return new UnauthorizedResult();
                 }
 
             }
