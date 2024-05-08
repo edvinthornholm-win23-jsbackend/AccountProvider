@@ -1,5 +1,6 @@
 using Data.Contexts;
 using Data.Entities;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -15,7 +16,7 @@ var host = new HostBuilder()
 
         services.AddDbContext<DataContext>(x => x.UseSqlServer(context.Configuration.GetConnectionString("AccountDatabase")));
 
-        services.AddDefaultIdentity<UserAccount>(x =>
+        services.AddIdentity<UserAccount, IdentityRole>(x =>
         { 
             x.SignIn.RequireConfirmedAccount = true;
             x.User.RequireUniqueEmail = true;
