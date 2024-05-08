@@ -14,3 +14,5 @@ public class UserAccount : IdentityUser
     public string? AddressId { get; set; }
     public UserAddress? Address { get; set; }
 }
+
+// C
