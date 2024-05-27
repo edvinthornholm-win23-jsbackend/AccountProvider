@@ -7,15 +7,26 @@ using Microsoft.Azure.Functions.Worker;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
+using System.IO;
 using System.Text;
-using System.Text.Json.Serialization;
+using System.Threading.Tasks;
+using Azure.Messaging.ServiceBus;
 
 namespace AccountProvider.Functions
 {
-    public class SignUp(ILogger<SignUp> logger, UserManager<UserAccount> userManager)
+    public class SignUp
     {
-        private readonly ILogger<SignUp> _logger = logger;
-        private readonly UserManager<UserAccount> _userManager = userManager;
+        private readonly ILogger<SignUp> _logger;
+        private readonly UserManager<UserAccount> _userManager;
+        private readonly ServiceBusClient _serviceBusClient;
+        private const string QueueName = "verification_request";
+
+        public SignUp(ILogger<SignUp> logger, UserManager<UserAccount> userManager, ServiceBusClient serviceBusClient)
+        {
+            _logger = logger;
+            _userManager = userManager;
+            _serviceBusClient = serviceBusClient;
+        }
 
         [Function("SignUp")]
         public async Task<IActionResult> Run([HttpTrigger(AuthorizationLevel.Function, "post")] HttpRequest req)
@@ -33,7 +44,6 @@ namespace AccountProvider.Functions
             if (body != null)
             {
                 UserRegistrationRequest urr = null!;
-
                 try
                 {
                     urr = JsonConvert.DeserializeObject<UserRegistrationRequest>(body)!;
@@ -46,7 +56,7 @@ namespace AccountProvider.Functions
                 if (urr != null && urr.Email != null && urr.Password != null)
                 {
                     if (!await _userManager.Users.AnyAsync(x => x.Email == urr.Email))
-                    { 
+                    {
                         var userAccount = new UserAccount
                         {
                             FirstName = urr.FirstName,
@@ -60,17 +70,8 @@ namespace AccountProvider.Functions
                             var result = await _userManager.CreateAsync(userAccount, urr.Password);
                             if (result.Succeeded)
                             {
-                                //send verification code (kör vi den som http request krävs ett svar tillbaka till skilnad från service bus)
-                                try 
-                                { 
-                                using var http = new HttpClient();
-                                StringContent content = new StringContent(JsonConvert.SerializeObject( new { Email = userAccount.Email }), Encoding.UTF8, "application/json");
-                                var response = await http.PostAsync("http://verifyprovider.silicon.azurewebsite.net/api/generate", content);
-                                }
-                                catch (Exception ex)
-                                {
-                                    _logger.LogError($"HttpPostAsync :: {ex.Message}");
-                                }
+                                // Send message to Service Bus
+                                await SendMessageToServiceBus(userAccount.Email);
                                 return new OkResult();
                             }
                         }
@@ -78,17 +79,35 @@ namespace AccountProvider.Functions
                         {
                             _logger.LogError($"_userManager.CreateAsync :: {ex.Message}");
                         }
-
-
                     }
                     else
                     {
                         return new ConflictResult();
                     }
                 }
-
             }
             return new BadRequestResult();
         }
+
+        private async Task SendMessageToServiceBus(string email)
+        {
+            try
+            {
+                ServiceBusSender sender = _serviceBusClient.CreateSender(QueueName);
+
+                string jsonMessage = JsonConvert.SerializeObject(new { Email = email });
+
+                ServiceBusMessage message = new ServiceBusMessage(jsonMessage);
+
+                await sender.SendMessageAsync(message);
+
+                _logger.LogInformation($"Sent message to Service Bus: {email}");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"SendMessageToServiceBus :: {ex.Message}");
+            }
+        }
+
     }
 }
