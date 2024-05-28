@@ -27,6 +27,15 @@ var host = new HostBuilder()
         services.AddAuthentication();
         services.AddAuthorization();
 
+        // Lägg till CORS
+        services.AddCors(options =>
+        {
+            options.AddPolicy("AllowAll",
+                builder => builder.AllowAnyOrigin()
+                                  .AllowAnyHeader()
+                                  .AllowAnyMethod());
+        });
+
         // Lägg till ServiceBusClient registrering här
         services.AddSingleton(serviceProvider =>
         {
